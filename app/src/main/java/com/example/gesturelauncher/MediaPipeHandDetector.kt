@@ -42,18 +42,17 @@ class MediaPipeHandDetector(
         }
     }
 
-    fun detectHand(imageProxy: ImageProxy) {
+    fun detectHand(imageProxy: ImageProxy): HandLandmarkerResult? {
+        var landmarkerResult: HandLandmarkerResult? = null
         val bitmap = imageProxy.toBitmapOrNull()
         if (bitmap != null && handLandmarker != null) {
             val rotatedBitmap = rotateBitmap(bitmap, imageProxy.imageInfo.rotationDegrees.toFloat())
             val mpImage = BitmapImageBuilder(rotatedBitmap).build()
 
-            val result: HandLandmarkerResult? = handLandmarker?.detect(mpImage)
+            landmarkerResult = handLandmarker?.detect(mpImage)
 
-            result?.landmarks()?.firstOrNull()?.let { landmarks ->
+            landmarkerResult?.landmarks()?.firstOrNull()?.let { landmarks ->
                 if (landmarks.size >= 9) {
-                    // Landmark 4 = Başparmak Ucu (Thumb Tip)
-                    // Landmark 8 = İşaret Parmağı Ucu (Index Finger Tip)
                     val thumb = landmarks[4]
                     val index = landmarks[8]
 
@@ -62,11 +61,15 @@ class MediaPipeHandDetector(
             }
         }
         imageProxy.close()
+        return landmarkerResult
     }
 
     private fun ImageProxy.toBitmapOrNull(): Bitmap? {
-        val bitmap = toBitmap()
-        return bitmap
+        return try {
+            toBitmap()
+        } catch (e: Exception) {
+            null
+        }
     }
 
     private fun rotateBitmap(bitmap: Bitmap, degrees: Float): Bitmap {
@@ -79,4 +82,3 @@ class MediaPipeHandDetector(
         handLandmarker?.close()
     }
 }
-
