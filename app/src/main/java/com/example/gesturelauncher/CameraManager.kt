@@ -16,23 +16,27 @@ class CameraManager(
 ) {
 
     private val cameraExecutor = Executors.newSingleThreadExecutor()
+    private var detector: MediaPipeHandDetector? = null
 
     fun startCamera() {
+        detector = MediaPipeHandDetector(context) { thumbX, thumbY, indexX, indexY ->
+            onHandDetected(thumbX, thumbY, indexX, indexY)
+        }
+
         val cameraProviderFuture = ProcessCameraProvider.getInstance(context)
 
         cameraProviderFuture.addListener({
             val cameraProvider = cameraProviderFuture.get()
 
-            // Ön kamerayı kullanıyoruz
             val cameraSelector = CameraSelector.DEFAULT_FRONT_CAMERA
 
-            // Canlı görüntü analizi için ImageAnalysis yapılandırması
             val imageAnalysis = ImageAnalysis.Builder()
                 .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_RGBA_8888)
                 .build()
 
             imageAnalysis.setAnalyzer(cameraExecutor) { imageProxy ->
-                processImageProxy(imageProxy)
+                detector?.detectHand(imageProxy)
             }
 
             try {
@@ -48,14 +52,8 @@ class CameraManager(
         }, ContextCompat.getMainExecutor(context))
     }
 
-    private fun processImageProxy(imageProxy: ImageProxy) {
-        // İlerleyen adımda MediaPipe modelinin çıktısı buraya bağlanacak
-        // Şimdilik çerçevenin işlendiğini belirtip kapatıyoruz
-        imageProxy.close()
-    }
-
     fun shutdown() {
+        detector?.close()
         cameraExecutor.shutdown()
     }
 }
-
