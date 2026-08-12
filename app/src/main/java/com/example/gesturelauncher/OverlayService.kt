@@ -44,15 +44,18 @@ class OverlayService : Service() {
             WindowManager.LayoutParams.TYPE_PHONE
         }
 
+        // Noktanın görünür kalması ve ekranın üzerinde kalması için flags ayarı
         layoutParams = WindowManager.LayoutParams(
-            40, 40, // İmleç boyutu (40x40 px)
+            60, 60, // Nokta boyutunu biraz büyüterek (60x60 px) fark edilmesini kolaylaştırdık
             type,
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or 
+            WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or 
+            WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
             PixelFormat.TRANSLUCENT
         ).apply {
             gravity = Gravity.TOP or Gravity.START
-            x = 0
-            y = 0
+            x = 300 // Başlangıçta ekranın ortalarına yakın durması için
+            y = 500
         }
 
         try {
@@ -62,7 +65,6 @@ class OverlayService : Service() {
         }
     }
 
-    // İmlecin konumunu ve rengini günceller
     fun updateCursor(x: Float, y: Float, isClicking: Boolean) {
         layoutParams?.let { params ->
             params.x = x.toInt()
@@ -71,13 +73,23 @@ class OverlayService : Service() {
             cursorView?.post {
                 val drawable = cursorView?.background as? GradientDrawable
                 drawable?.setColor(if (isClicking) Color.GREEN else Color.RED)
-                windowManager?.updateViewLayout(cursorView, params)
+                try {
+                    windowManager?.updateViewLayout(cursorView, params)
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
             }
         }
     }
 
     override fun onDestroy() {
         super.onDestroy()
-        cursorView?.let { windowManager?.removeView(it) }
+        cursorView?.let { 
+            try {
+                windowManager?.removeView(it)
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
     }
 }
