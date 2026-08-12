@@ -27,15 +27,18 @@ class MainActivity : AppCompatActivity() {
     private val serviceConnection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
             overlayService = (service as OverlayService.LocalBinder).getService()
+            handTrackingManager.overlayService = overlayService
         }
-        override fun onServiceDisconnected(name: ComponentName?) { overlayService = null }
+        override fun onServiceDisconnected(name: ComponentName?) {
+            overlayService = null
+            handTrackingManager.overlayService = null
+        }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
-        // İzinleri kontrol et ve servisi başlat
         checkAndRequestOverlayPermission()
         bindService(Intent(this, OverlayService::class.java), serviceConnection, BIND_AUTO_CREATE)
 
@@ -44,7 +47,6 @@ class MainActivity : AppCompatActivity() {
         val overlayView = findViewById<OverlayView>(R.id.overlayView)
         val tvStatus = findViewById<TextView>(R.id.tvStatus)
 
-        // Test Butonları
         val btns = listOf(R.id.btnTest1, R.id.btnTest2, R.id.btnTest3, R.id.btnTest4).map { findViewById<Button>(it) }
         btns.forEachIndexed { i, btn ->
             btn.setOnClickListener { clickCounts[i]++; btn.text = "Test ${i+1}\nTık: ${clickCounts[i]}" }
@@ -68,13 +70,12 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun initCamera(previewView: PreviewView, overlayView: OverlayView, tvStatus: TextView) {
-        val dm = DisplayMetrics(); windowManager.defaultDisplay.getMetrics(dm)
-        
+        val dm = DisplayMetrics()
+        windowManager.defaultDisplay.getMetrics(dm)
+
         cameraManager = CameraManager(this, this, previewView, overlayView) { thumbX, thumbY, indexX, indexY ->
             runOnUiThread {
                 tvStatus.text = "El Takip Ediliyor"
-                // Hem sistem imlecini güncelle hem de el koordinatlarını hesapla
-                overlayService?.updateCursor(thumbX * dm.widthPixels, thumbY * dm.heightPixels)
                 handTrackingManager.processHandLandmarks(thumbX, thumbY, indexX, indexY, dm.widthPixels, dm.heightPixels)
             }
         }
