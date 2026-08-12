@@ -13,7 +13,6 @@ import android.os.IBinder
 import android.provider.Settings
 import android.util.DisplayMetrics
 import android.widget.Button
-import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
@@ -47,7 +46,8 @@ class MainActivity : AppCompatActivity() {
         val btnCamera = findViewById<Button>(R.id.btnCameraPermission)
         val btnAccessibility = findViewById<Button>(R.id.btnAccessibilityPermission)
 
-        checkOverlayPermission()
+        // Üstte gösterim izni kontrolü
+        checkAndRequestOverlayPermission()
 
         btnCamera.setOnClickListener {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
@@ -66,20 +66,31 @@ class MainActivity : AppCompatActivity() {
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
             initCamera()
         }
-
-        startOverlayService()
     }
 
-    private fun checkOverlayPermission() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) {
-            val intent = Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName"))
-            startActivityForResult(intent, OVERLAY_REQ_CODE)
+    private fun checkAndRequestOverlayPermission() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            if (!Settings.canDrawOverlays(this)) {
+                val intent = Intent(
+                    Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                    Uri.parse("package:$packageName")
+                )
+                startActivityForResult(intent, OVERLAY_REQ_CODE)
+            } else {
+                startOverlayService()
+            }
+        } else {
+            startOverlayService()
         }
     }
 
     private fun startOverlayService() {
         val intent = Intent(this, OverlayService::class.java)
-        startService(intent)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            startForegroundService(intent)
+        } else {
+            startService(intent)
+        }
         bindService(intent, serviceConnection, Context.BIND_AUTO_CREATE)
     }
 
@@ -93,6 +104,17 @@ class MainActivity : AppCompatActivity() {
             handTrackingManager.processHandLandmarks(thumbX, thumbY, indexX, indexY, screenWidth, screenHeight)
         }
         cameraManager?.startCamera()
+    }
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == OVERLAY_REQ_CODE) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && Settings.canDrawOverlays(this)) {
+                startOverlayService()
+            } else {
+                Toast.makeText(this, "Üstte gösterim izni gerekli!", Toast.LENGTH_SHORT).show()
+            }
+        }
     }
 
     override fun onDestroy() {
