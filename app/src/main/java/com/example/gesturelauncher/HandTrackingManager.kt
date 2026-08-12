@@ -5,27 +5,29 @@ import kotlin.math.hypot
 class HandTrackingManager {
 
     private var lastClickTime = 0L
-    private val CLICK_COOLDOWN_MS = 1000L // Yanlışlıkla peş peşe tıklamayı önlemek için 1 saniye bekleme
+    private val CLICK_COOLDOWN_MS = 1000L
+    var overlayService: OverlayService? = null
 
-    // İşaret parmağı (Tip 8) ve Başparmak (Tip 4) koordinatlarını alıp işlem yapar
     fun processHandLandmarks(thumbX: Float, thumbY: Float, indexX: Float, indexY: Float, screenWidth: Int, screenHeight: Int) {
-        // İki nokta arasındaki mesafeyi hesapla
-        val distance = hypot((indexX - thumbX).toDouble(), (indexY - thumbY).toDouble())
+        // Aynalama (mirroring) düzeltmesi için X koordinatını ters çeviriyoruz
+        val correctedIndexX = 1.0f - indexX
+        val correctedThumbX = 1.0f - thumbX
 
-        // Mesafe eşik değerinin altındaysa tıklama algıla
-        if (distance < 0.05) { // 0.05 normalize edilmiş mesafe eşiği
+        val targetX = correctedIndexX * screenWidth
+        val targetY = indexY * screenHeight
+
+        val distance = hypot((correctedIndexX - correctedThumbX).toDouble(), (indexY - thumbY).toDouble())
+        val isClicking = distance < 0.08 // Tıklama hassasiyet eşiği
+
+        // Ekrandaki imlecin konumunu güncelle
+        overlayService?.updateCursor(targetX, targetY, isClicking)
+
+        if (isClicking) {
             val currentTime = System.currentTimeMillis()
             if (currentTime - lastClickTime > CLICK_COOLDOWN_MS) {
                 lastClickTime = currentTime
-                
-                // Kamera görüntüsünü ekran koordinatlarına dönüştür
-                val targetX = indexX * screenWidth
-                val targetY = indexY * screenHeight
-
-                // Servis aktifse dokunmayı gerçekleştir
                 GestureAccessibilityService.instance?.performClickAt(targetX, targetY)
             }
         }
     }
 }
-
