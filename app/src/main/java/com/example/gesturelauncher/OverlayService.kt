@@ -1,17 +1,18 @@
 package com.example.gesturelauncher
 
 import android.app.Service
-import android.content.Context
 import android.content.Intent
 import android.graphics.Color
 import android.graphics.PixelFormat
 import android.graphics.drawable.GradientDrawable
+import android.graphics.drawable.LayerDrawable
 import android.os.Binder
 import android.os.Build
 import android.os.IBinder
 import android.view.Gravity
 import android.view.View
 import android.view.WindowManager
+import android.widget.FrameLayout
 
 class OverlayService : Service() {
 
@@ -28,14 +29,21 @@ class OverlayService : Service() {
 
     override fun onCreate() {
         super.onCreate()
-        windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
+        windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
+        setupCursor()
+    }
+
+    private fun setupCursor() {
+        // İmleci daha şık yapmak için: İçi kırmızı, dışı beyaz çerçeveli bir daire
+        val circle = GradientDrawable().apply {
+            shape = GradientDrawable.OVAL
+            setColor(Color.RED)
+            setStroke(4, Color.WHITE) // Beyaz çerçeve
+            setSize(50, 50)
+        }
 
         cursorView = View(this).apply {
-            val drawable = GradientDrawable().apply {
-                shape = GradientDrawable.OVAL
-                setColor(Color.RED)
-            }
-            background = drawable
+            background = circle
         }
 
         val type = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -44,52 +52,32 @@ class OverlayService : Service() {
             WindowManager.LayoutParams.TYPE_PHONE
         }
 
-        // Noktanın görünür kalması ve ekranın üzerinde kalması için flags ayarı
         layoutParams = WindowManager.LayoutParams(
-            60, 60, // Nokta boyutunu biraz büyüterek (60x60 px) fark edilmesini kolaylaştırdık
+            60, 60,
             type,
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or 
-            WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or 
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+            WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
             WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
             PixelFormat.TRANSLUCENT
         ).apply {
             gravity = Gravity.TOP or Gravity.START
-            x = 300 // Başlangıçta ekranın ortalarına yakın durması için
-            y = 500
         }
 
-        try {
-            windowManager?.addView(cursorView, layoutParams)
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
+        windowManager?.addView(cursorView, layoutParams)
     }
 
-    fun updateCursor(x: Float, y: Float, isClicking: Boolean) {
+    fun updateCursor(x: Float, y: Float) {
         layoutParams?.let { params ->
-            params.x = x.toInt()
-            params.y = y.toInt()
-            
+            params.x = x.toInt() - 30 // Merkeze hizalama
+            params.y = y.toInt() - 30
             cursorView?.post {
-                val drawable = cursorView?.background as? GradientDrawable
-                drawable?.setColor(if (isClicking) Color.GREEN else Color.RED)
-                try {
-                    windowManager?.updateViewLayout(cursorView, params)
-                } catch (e: Exception) {
-                    e.printStackTrace()
-                }
+                windowManager?.updateViewLayout(cursorView, params)
             }
         }
     }
 
     override fun onDestroy() {
         super.onDestroy()
-        cursorView?.let { 
-            try {
-                windowManager?.removeView(it)
-            } catch (e: Exception) {
-                e.printStackTrace()
-            }
-        }
+        cursorView?.let { windowManager?.removeView(it) }
     }
 }
