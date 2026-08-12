@@ -1,14 +1,15 @@
 package com.example.gesturelauncher
 
 import android.Manifest
-import android.content.Intent
+import android.content.*
 import android.content.pm.PackageManager
+import android.net.Uri
+import android.os.Build
 import android.os.Bundle
+import android.os.IBinder
 import android.provider.Settings
 import android.util.DisplayMetrics
-import android.widget.Button
-import android.widget.TextView
-import android.widget.Toast
+import android.widget.*
 import androidx.appcompat.app.AppCompatActivity
 import androidx.camera.view.PreviewView
 import androidx.core.app.ActivityCompat
@@ -17,60 +18,65 @@ import androidx.core.content.ContextCompat
 class MainActivity : AppCompatActivity() {
 
     private val CAMERA_REQ_CODE = 101
+    private val OVERLAY_REQ_CODE = 102
     private var cameraManager: CameraManager? = null
+    private var overlayService: OverlayService? = null
     private val handTrackingManager = HandTrackingManager()
-
     private val clickCounts = IntArray(4) { 0 }
+
+    private val serviceConnection = object : ServiceConnection {
+        override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
+            overlayService = (service as OverlayService.LocalBinder).getService()
+        }
+        override fun onServiceDisconnected(name: ComponentName?) { overlayService = null }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
+        // İzinleri kontrol et ve servisi başlat
+        checkAndRequestOverlayPermission()
+        bindService(Intent(this, OverlayService::class.java), serviceConnection, BIND_AUTO_CREATE)
+
         val btnCamera = findViewById<Button>(R.id.btnCameraPermission)
-        val btnAccessibility = findViewById<Button>(R.id.btnAccessibilityPermission)
         val previewView = findViewById<PreviewView>(R.id.viewFinder)
         val overlayView = findViewById<OverlayView>(R.id.overlayView)
         val tvStatus = findViewById<TextView>(R.id.tvStatus)
 
-        val btnTest1 = findViewById<Button>(R.id.btnTest1)
-        val btnTest2 = findViewById<Button>(R.id.btnTest2)
-        val btnTest3 = findViewById<Button>(R.id.btnTest3)
-        val btnTest4 = findViewById<Button>(R.id.btnTest4)
-
-        // Test Butonlarının Tıklama Dinleyicileri
-        btnTest1.setOnClickListener { clickCounts[0]++; btnTest1.text = "Test 1\nTık: ${clickCounts[0]}" }
-        btnTest2.setOnClickListener { clickCounts[1]++; btnTest2.text = "Test 2\nTık: ${clickCounts[1]}" }
-        btnTest3.setOnClickListener { clickCounts[2]++; btnTest3.text = "Test 3\nTık: ${clickCounts[2]}" }
-        btnTest4.setOnClickListener { clickCounts[3]++; btnTest4.text = "Test 4\nTık: ${clickCounts[4]}" }
+        // Test Butonları
+        val btns = listOf(R.id.btnTest1, R.id.btnTest2, R.id.btnTest3, R.id.btnTest4).map { findViewById<Button>(it) }
+        btns.forEachIndexed { i, btn ->
+            btn.setOnClickListener { clickCounts[i]++; btn.text = "Test ${i+1}\nTık: ${clickCounts[i]}" }
+        }
 
         btnCamera.setOnClickListener {
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
-                ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.CAMERA), CAMERA_REQ_CODE)
-            } else {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
                 initCamera(previewView, overlayView, tvStatus)
+            } else {
+                ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.CAMERA), CAMERA_REQ_CODE)
             }
         }
+    }
 
-        btnAccessibility.setOnClickListener {
-            startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
-        }
-
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
-            initCamera(previewView, overlayView, tvStatus)
+    private fun checkAndRequestOverlayPermission() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) {
+            startActivityForResult(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")), OVERLAY_REQ_CODE)
+        } else {
+            startService(Intent(this, OverlayService::class.java))
         }
     }
 
     private fun initCamera(previewView: PreviewView, overlayView: OverlayView, tvStatus: TextView) {
-        val displayMetrics = DisplayMetrics()
-        windowManager.defaultDisplay.getMetrics(displayMetrics)
-        val screenWidth = displayMetrics.widthPixels
-        val screenHeight = displayMetrics.heightPixels
-
+        val dm = DisplayMetrics(); windowManager.defaultDisplay.getMetrics(dm)
+        
         cameraManager = CameraManager(this, this, previewView, overlayView) { thumbX, thumbY, indexX, indexY ->
             runOnUiThread {
                 tvStatus.text = "El Takip Ediliyor"
+                // Hem sistem imlecini güncelle hem de el koordinatlarını hesapla
+                overlayService?.updateCursor(thumbX * dm.widthPixels, thumbY * dm.heightPixels)
+                handTrackingManager.processHandLandmarks(thumbX, thumbY, indexX, indexY, dm.widthPixels, dm.heightPixels)
             }
-            handTrackingManager.processHandLandmarks(thumbX, thumbY, indexX, indexY, screenWidth, screenHeight)
         }
         cameraManager?.startCamera()
     }
@@ -78,5 +84,6 @@ class MainActivity : AppCompatActivity() {
     override fun onDestroy() {
         super.onDestroy()
         cameraManager?.shutdown()
+        unbindService(serviceConnection)
     }
 }
