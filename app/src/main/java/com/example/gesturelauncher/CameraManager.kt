@@ -3,15 +3,19 @@ package com.example.gesturelauncher
 import android.content.Context
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
-import androidx.camera.core.ImageProxy
+import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
+import androidx.camera.view.PreviewView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleOwner
+import com.google.mediapipe.tasks.vision.handlandmarker.HandLandmarkerResult
 import java.util.concurrent.Executors
 
 class CameraManager(
     private val context: Context,
     private val lifecycleOwner: LifecycleOwner,
+    private val previewView: PreviewView,
+    private val overlayView: OverlayView,
     private val onHandDetected: (thumbX: Float, thumbY: Float, indexX: Float, indexY: Float) -> Unit
 ) {
 
@@ -27,8 +31,11 @@ class CameraManager(
 
         cameraProviderFuture.addListener({
             val cameraProvider = cameraProviderFuture.get()
-
             val cameraSelector = CameraSelector.DEFAULT_FRONT_CAMERA
+
+            val preview = Preview.Builder().build().also {
+                it.setSurfaceProvider(previewView.surfaceProvider)
+            }
 
             val imageAnalysis = ImageAnalysis.Builder()
                 .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
@@ -36,7 +43,12 @@ class CameraManager(
                 .build()
 
             imageAnalysis.setAnalyzer(cameraExecutor) { imageProxy ->
-                detector?.detectHand(imageProxy)
+                val result = detector?.detectHand(imageProxy)
+                result?.let { handLandmarkerResult ->
+                    overlayView.setResults(handLandmarkerResult)
+                } ?: run {
+                    overlayView.clear()
+                }
             }
 
             try {
@@ -44,6 +56,7 @@ class CameraManager(
                 cameraProvider.bindToLifecycle(
                     lifecycleOwner,
                     cameraSelector,
+                    preview,
                     imageAnalysis
                 )
             } catch (e: Exception) {
